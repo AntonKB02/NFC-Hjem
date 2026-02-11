@@ -1,2 +1,0 @@
-# NFC-Hjem
-Projekt

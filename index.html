@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Scanner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+
+        .data-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            word-break: break-all;
+            display: none;
+        }
+
+        .data-display.show {
+            display: block;
+        }
+
+        .data-display h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .data-display p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #ffeeba;
+        }
+
+        .nfc-icon {
+            text-align: center;
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nfc-icon">📱</div>
+        <h1>NFC Scanner</h1>
+
+        <div id="warning" class="warning" style="display: none;">
+            ⚠️ Din browser understøtter ikke Web NFC API. Denne funktion virker kun på Android-enheder med Chrome.
+        </div>
+
+        <div class="button-group">
+            <button id="scanBtn">📖 Læs NFC Tag</button>
+            <button id="writeBtn">✍️ Skriv til NFC Tag</button>
+        </div>
+
+        <div class="input-group" id="writeSection" style="display: none;">
+            <label for="textInput">Indtast tekst at skrive til NFC tag:</label>
+            <textarea id="textInput" placeholder="Skriv din besked her..."></textarea>
+            <button id="confirmWriteBtn" style="margin-top: 10px;">Bekræft og Skriv</button>
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <div id="dataDisplay" class="data-display">
+            <h3>Læst Data:</h3>
+            <p id="dataContent"></p>
+        </div>
+    </div>
+
+    <script>
+        const scanBtn = document.getElementById('scanBtn');
+        const writeBtn = document.getElementById('writeBtn');
+        const confirmWriteBtn = document.getElementById('confirmWriteBtn');
+        const writeSection = document.getElementById('writeSection');
+        const textInput = document.getElementById('textInput');
+        const status = document.getElementById('status');
+        const dataDisplay = document.getElementById('dataDisplay');
+        const dataContent = document.getElementById('dataContent');
+        const warning = document.getElementById('warning');
+
+        // Tjek om Web NFC API er tilgængelig
+        if (!('NDEFReader' in window)) {
+            warning.style.display = 'block';
+            scanBtn.disabled = true;
+            writeBtn.disabled = true;
+        }
+
+        // Hjælpefunktion til at vise status beskeder
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        // Læs NFC Tag
+        scanBtn.addEventListener('click', async () => {
+            try {
+                showStatus('Klar til at scanne. Hold din telefon tæt på NFC tagget...', 'info');
+                
+                const ndef = new NDEFReader();
+                await ndef.scan();
+
+                showStatus('Scanner aktiv! Vent venligst...', 'info');
+
+                ndef.addEventListener('reading', ({ message, serialNumber }) => {
+                    showStatus('NFC tag læst succesfuldt! ✓', 'success');
+                    
+                    let textData = '';
+                    
+                    for (const record of message.records) {
+                        if (record.recordType === 'text') {
+                            const textDecoder = new TextDecoder(record.encoding);
+                            textData += textDecoder.decode(record.data);
+                        } else if (record.recordType === 'url') {
+                            const textDecoder = new TextDecoder();
+                            textData += textDecoder.decode(record.data);
+                        }
+                    }
+
+                    if (textData) {
+                        dataContent.textContent = textData;
+                        dataDisplay.classList.add('show');
+                    } else {
+                        dataContent.textContent = 'Ingen læsbar tekst fundet på tagget.';
+                        dataDisplay.classList.add('show');
+                    }
+
+                    console.log('Serial Number:', serialNumber);
+                    console.log('Records:', message.records);
+                });
+
+                ndef.addEventListener('readingerror', () => {
+                    showStatus('Fejl ved læsning af NFC tag. Prøv igen.', 'error');
+                });
+
+            } catch (error) {
+                showStatus(`Fejl: ${error.message}`, 'error');
+                console.error(error);
+            }
+        });
+
+        // Vis skriv sektion
+        writeBtn.addEventListener('click', () => {
+            writeSection.style.display = 'block';
+            dataDisplay.classList.remove('show');
+            showStatus('Indtast tekst og klik på "Bekræft og Skriv"', 'info');
+        });
+
+        // Skriv til NFC Tag
+        confirmWriteBtn.addEventListener('click', async () => {
+            const text = textInput.value.trim();
+            
+            if (!text) {
+                showStatus('Indtast venligst noget tekst først!', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Klar til at skrive. Hold din telefon tæt på NFC tagget...', 'info');
+                
+                const ndef = new NDEFReader();
+                await ndef.write({
+                    records: [{ recordType: "text", data: text }]
+                });
+
+                showStatus('Data skrevet til NFC tag succesfuldt! ✓', 'success');
+                textInput.value = '';
+                writeSection.style.display = 'none';
+
+            } catch (error) {
+                showStatus(`Fejl ved skrivning: ${error.message}`, 'error');
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>
